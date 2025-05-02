@@ -13,8 +13,8 @@ endif()
 # AVCEncoderアプリケーション
 add_executable(avc_encoder AVCEncoder.cpp)
 
-# NAL Encoderアプリケーション
-add_executable(nal_encoder nal_encoder.cpp)
+# NAL Encoder & Decoderアプリケーション
+add_executable(nal_encode_decode nal_encode_decode.cpp)
 
 # NAL Decoderアプリケーション
 add_executable(nal_decoder nal_decoder.cpp)
@@ -29,8 +29,8 @@ if(WIN32)
         strmiids    # DirectShowのライブラリを追加
     )
     
-    # NAL Encoderのライブラリ
-    target_link_libraries(nal_encoder
+    # NAL Encoder & Decoderのライブラリ
+    target_link_libraries(nal_encode_decode
         mfplat
         mfuuid
         mfreadwrite
@@ -50,12 +50,12 @@ if(WIN32)
 endif()
 
 # 出力ディレクトリの設定
-set_target_properties(avc_encoder nal_encoder nal_decoder
+set_target_properties(avc_encoder nal_encode_decode nal_decoder
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
 # インストールターゲット
-install(TARGETS avc_encoder nal_encoder nal_decoder
+install(TARGETS avc_encoder nal_encode_decode nal_decoder
     RUNTIME DESTINATION bin
 )
