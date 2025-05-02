@@ -501,6 +501,9 @@ int main()
     std::vector<BYTE> frameBuffer;
     const UINT32 frameCount = 100;
     
+    // すべてのエンコード結果を格納するベクター
+    std::vector<std::vector<BYTE>> allNalUnits;
+    
     for (UINT32 i = 0; i < frameCount; i++) {
         // テストフレームの生成
         GenerateTestFrame(frameBuffer, encoder.width, encoder.height, i);
@@ -513,23 +516,27 @@ int main()
             break;
         }
         
-        // NALユニットをファイルに書き込む
-        for (const auto& nalUnit : outputNalUnits) {
-            // NALユニット長をファイルに書き込む (ビッグエンディアン 4バイト)
-            BYTE lengthBytes[4];
-            lengthBytes[0] = (nalUnit.size() >> 24) & 0xFF;
-            lengthBytes[1] = (nalUnit.size() >> 16) & 0xFF;
-            lengthBytes[2] = (nalUnit.size() >> 8) & 0xFF;
-            lengthBytes[3] = nalUnit.size() & 0xFF;
-            
-            encoder.nalFile.write(reinterpret_cast<const char*>(lengthBytes), 4);
-            encoder.nalFile.write(reinterpret_cast<const char*>(nalUnit.data()), nalUnit.size());
-        }
+        // エンコード結果を全体のリストに追加
+        allNalUnits.insert(allNalUnits.end(), outputNalUnits.begin(), outputNalUnits.end());
         
         // 進捗表示
         if (i % 10 == 0) {
             printf("Encoded frame %d/%d\n", i, frameCount);
         }
+    }
+    
+    // 全NALユニットをファイルに書き込む
+    printf("Writing %zu NAL units to file...\n", allNalUnits.size());
+    for (const auto& nalUnit : allNalUnits) {
+        // NALユニット長をファイルに書き込む (ビッグエンディアン 4バイト)
+        BYTE lengthBytes[4];
+        lengthBytes[0] = (nalUnit.size() >> 24) & 0xFF;
+        lengthBytes[1] = (nalUnit.size() >> 16) & 0xFF;
+        lengthBytes[2] = (nalUnit.size() >> 8) & 0xFF;
+        lengthBytes[3] = nalUnit.size() & 0xFF;
+        
+        encoder.nalFile.write(reinterpret_cast<const char*>(lengthBytes), 4);
+        encoder.nalFile.write(reinterpret_cast<const char*>(nalUnit.data()), nalUnit.size());
     }
     
     // エンコーダーのシャットダウン
