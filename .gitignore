@@ -1,0 +1,32 @@
+# ビルド成果物
+build/
+*.o
+*.obj
+*.exe
+*.ilk
+*.pdb
+*.dll
+*.lib
+*.exp
+
+# Visual Studioの一時ファイル
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.aps
+*.ipch
+*.sdf
+*.opensdf
+*.suo
+*.db
+*.opendb
+
+# テスト出力ファイル
+output_nal.h264
+
+# CMakeが生成するファイル
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
