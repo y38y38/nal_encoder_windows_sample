@@ -16,6 +16,9 @@ add_executable(avc_encoder AVCEncoder.cpp)
 # NAL Encoderアプリケーション
 add_executable(nal_encoder nal_encoder.cpp)
 
+# NAL Decoderアプリケーション
+add_executable(nal_decoder nal_decoder.cpp)
+
 # Windows固有のリンク設定
 if(WIN32)
     # AVCEncoderのライブラリ
@@ -34,15 +37,25 @@ if(WIN32)
         ole32       # CoInitializeEx/CoUninitializeのため
         # strmiidsライブラリを削除（AMGetErrorTextを使用しないため）
     )
+    
+    # NAL Decoderのライブラリ
+    target_link_libraries(nal_decoder
+        mfplat
+        mfuuid
+        mfreadwrite
+        ole32       # CoInitializeEx/CoUninitializeのため
+        mf          # 追加のMedia Foundationライブラリ
+        # wmcodercdspライブラリは利用できないため削除
+    )
 endif()
 
 # 出力ディレクトリの設定
-set_target_properties(avc_encoder nal_encoder
+set_target_properties(avc_encoder nal_encoder nal_decoder
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
 # インストールターゲット
-install(TARGETS avc_encoder nal_encoder
+install(TARGETS avc_encoder nal_encoder nal_decoder
     RUNTIME DESTINATION bin
 )
