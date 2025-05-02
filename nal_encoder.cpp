@@ -124,6 +124,54 @@ HRESULT WriteNalToFile(NalEncoder* pEncoder, IMFSample* pSample)
     return hr;
 }
 
+// IMFSampleからNALユニットを抽出する関数
+HRESULT ExtractNalUnitsFromSample(IMFSample* pSample, std::vector<std::vector<BYTE>>& outputNalUnits)
+{
+    HRESULT hr = S_OK;
+    DWORD bufferCount = 0;
+    
+    if (!pSample) {
+        return E_INVALIDARG;
+    }
+    
+    hr = pSample->GetBufferCount(&bufferCount);
+    CHECK_HR(hr, "GetBufferCount");
+    
+    printf("Extracting NAL units (buffer count: %d)\n", bufferCount);
+    
+    for (DWORD i = 0; i < bufferCount; i++) {
+        IMFMediaBuffer* pBuffer = NULL;
+        hr = pSample->GetBufferByIndex(i, &pBuffer);
+        CHECK_HR(hr, "GetBufferByIndex");
+        
+        BYTE* pData = NULL;
+        DWORD maxLength = 0;
+        DWORD currentLength = 0;
+        
+        hr = pBuffer->Lock(&pData, &maxLength, &currentLength);
+        CHECK_HR(hr, "Lock");
+        
+        // NALユニットを抽出
+        if (currentLength > 0 && pData != NULL) {
+            // 新しいNALユニット用のvector作成
+            std::vector<BYTE> nalUnit(pData, pData + currentLength);
+            outputNalUnits.push_back(nalUnit);
+            
+            printf("  - NAL unit extracted: %d bytes\n", currentLength);
+        }
+        
+        hr = pBuffer->Unlock();
+        CHECK_HR(hr, "Unlock");
+        
+        if (pBuffer) {
+            pBuffer->Release();
+            pBuffer = NULL;
+        }
+    }
+    
+    return hr;
+}
+
 // エンコーダーを初期化する関数
 HRESULT InitializeEncoder(NalEncoder* pEncoder, const char* outputFilename)
 {
@@ -270,7 +318,7 @@ HRESULT InitializeEncoder(NalEncoder* pEncoder, const char* outputFilename)
 }
 
 // フレームをエンコードして、NALユニットを取得する関数
-HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData)
+HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData, std::vector<std::vector<BYTE>>& outputNalUnits)
 {
     HRESULT hr = S_OK;
     MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {0};
@@ -337,6 +385,9 @@ HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData)
     outputDataBuffer.dwStatus = 0;
     outputDataBuffer.pEvents = NULL;
     
+    // 出力データを格納するベクターをクリア
+    outputNalUnits.clear();
+    
     // エンコード結果を取得（複数のNALユニットが出力される可能性あり）
     do {
         hr = pEncoder->pEncoder->ProcessOutput(0, 1, &outputDataBuffer, &processOutputStatus);
@@ -347,9 +398,9 @@ HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData)
             hr = S_OK;
             break;
         } else if (SUCCEEDED(hr)) {
-            // 出力サンプルをファイルに書き込む
-            hr = WriteNalToFile(pEncoder, outputDataBuffer.pSample);
-            CHECK_HR(hr, "WriteNalToFile");
+            // NALユニットを取得してvectorに追加
+            hr = ExtractNalUnitsFromSample(outputDataBuffer.pSample, outputNalUnits);
+            CHECK_HR(hr, "ExtractNalUnitsFromSample");
         } else if (hr == E_INVALIDARG) {
             // 無効な引数エラーの詳細情報を表示（デバッグ用）
             printf("E_INVALIDARG error - Check buffer configuration, StreamID: %d, Status: 0x%08X\n", 
@@ -455,10 +506,24 @@ int main()
         GenerateTestFrame(frameBuffer, encoder.width, encoder.height, i);
         
         // フレームのエンコード
-        hr = EncodeFrame(&encoder, frameBuffer);
+        std::vector<std::vector<BYTE>> outputNalUnits;
+        hr = EncodeFrame(&encoder, frameBuffer, outputNalUnits);
         if (FAILED(hr)) {
             printf("Frame encoding failed at frame %d: 0x%08X\n", i, hr);
             break;
+        }
+        
+        // NALユニットをファイルに書き込む
+        for (const auto& nalUnit : outputNalUnits) {
+            // NALユニット長をファイルに書き込む (ビッグエンディアン 4バイト)
+            BYTE lengthBytes[4];
+            lengthBytes[0] = (nalUnit.size() >> 24) & 0xFF;
+            lengthBytes[1] = (nalUnit.size() >> 16) & 0xFF;
+            lengthBytes[2] = (nalUnit.size() >> 8) & 0xFF;
+            lengthBytes[3] = nalUnit.size() & 0xFF;
+            
+            encoder.nalFile.write(reinterpret_cast<const char*>(lengthBytes), 4);
+            encoder.nalFile.write(reinterpret_cast<const char*>(nalUnit.data()), nalUnit.size());
         }
         
         // 進捗表示
