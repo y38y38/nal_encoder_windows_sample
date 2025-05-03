@@ -570,8 +570,10 @@ HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height, con
     return hr;
 }
 
-// NALユニットをデコードして、YUVフレームとして保存する
-HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData) {
+// NALユニットをデコードして、YUVフレームデータとして返す
+// 戻り値: HRESULT (成功/失敗)
+// 出力パラメータ: outputFrameData - デコードされたYUVフレームデータを格納するベクター
+HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, std::vector<BYTE>* outputFrameData) {
     HRESULT hr = S_OK;
     MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {0};
     DWORD processOutputStatus = 0;
@@ -579,6 +581,11 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData) {
     // 入力サンプルの作成
     IMFSample* pInSample = NULL;
     IMFMediaBuffer* pInBuffer = NULL;
+    
+    // 出力パラメータの検証
+    if (!outputFrameData) {
+        return E_INVALIDARG;
+    }
     
     hr = MFCreateSample(&pInSample);
     CHECK_HR(hr, "MFCreateSample for decoder input");
@@ -666,7 +673,7 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData) {
             }
             break;
         } else if (SUCCEEDED(hr)) {
-            // デコード成功、YUVデータを取得して保存
+            // デコード成功、YUVデータを取得
             IMFMediaBuffer* pBuffer = NULL;
             hr = pOutSample->ConvertToContiguousBuffer(&pBuffer);
             CHECK_HR(hr, "ConvertToContiguousBuffer for decoder output");
@@ -678,10 +685,16 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData) {
             hr = pBuffer->Lock(&pYuvData, &yuvMaxLength, &yuvCurrentLength);
             CHECK_HR(hr, "Lock decoder output buffer");
             
-            // YUVデータをファイルに書き込み
+            // YUVデータを出力ベクターにコピー
             if (yuvCurrentLength > 0 && pYuvData != NULL) {
-                pDecoder->yuvFile.write(reinterpret_cast<char*>(pYuvData), yuvCurrentLength);
-                printf("Decoded frame %llu: %d bytes written to YUV file\n", 
+                // 出力ベクターのサイズを設定（既存データがあれば追加）
+                size_t currentSize = outputFrameData->size();
+                outputFrameData->resize(currentSize + yuvCurrentLength);
+                
+                // YUVデータをコピー
+                memcpy(outputFrameData->data() + currentSize, pYuvData, yuvCurrentLength);
+                
+                printf("Decoded frame %llu: %d bytes of YUV data\n", 
                        pDecoder->frameCount, yuvCurrentLength);
                 pDecoder->frameCount++;
             }
@@ -835,16 +848,20 @@ int main()
     // IDRフレームの前にSPS/PPSを常に送るようにする
     std::vector<BYTE> spsData;
     std::vector<BYTE> ppsData;
+    std::vector<BYTE> frameData; // デコードされたフレームデータを格納するためのベクター
     
     for (const auto& nalUnit : allNalUnits) {
         if (nalUnit.size() > 0) {
             // NALユニットタイプの判定 (最初のバイトの下位5ビット)
             BYTE nalType = nalUnit[0] & 0x1F;
             
+            // デコードされたフレームデータを格納するためのベクター
+            std::vector<BYTE> decodedFrameData;
+            
             // SPSの場合は保存
             if (nalType == 7) {
                 spsData = nalUnit;
-                hr = DecodeNalUnit(&decoder, nalUnit);
+                hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
                 if (FAILED(hr)) {
                     printf("Failed to decode SPS: 0x%08X\n", hr);
                 }
@@ -852,7 +869,7 @@ int main()
             // PPSの場合は保存
             else if (nalType == 8) {
                 ppsData = nalUnit;
-                hr = DecodeNalUnit(&decoder, nalUnit);
+                hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
                 if (FAILED(hr)) {
                     printf("Failed to decode PPS: 0x%08X\n", hr);
                 }
@@ -861,31 +878,53 @@ int main()
             else if (nalType == 5) {
                 // SPSがあれば送信
                 if (!spsData.empty()) {
-                    hr = DecodeNalUnit(&decoder, spsData);
+                    hr = DecodeNalUnit(&decoder, spsData, &decodedFrameData);
                     if (FAILED(hr)) {
                         printf("Failed to decode SPS before IDR: 0x%08X\n", hr);
+                    }
+                    
+                    // 有効なYUVデータが得られた場合はファイルに書き込む
+                    if (!decodedFrameData.empty()) {
+                        decoder.yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
                     }
                 }
                 
                 // PPSがあれば送信
                 if (!ppsData.empty()) {
-                    hr = DecodeNalUnit(&decoder, ppsData);
+                    decodedFrameData.clear();
+                    hr = DecodeNalUnit(&decoder, ppsData, &decodedFrameData);
                     if (FAILED(hr)) {
                         printf("Failed to decode PPS before IDR: 0x%08X\n", hr);
+                    }
+                    
+                    // 有効なYUVデータが得られた場合はファイルに書き込む
+                    if (!decodedFrameData.empty()) {
+                        decoder.yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
                     }
                 }
                 
                 // IDRフレームをデコード
-                hr = DecodeNalUnit(&decoder, nalUnit);
+                decodedFrameData.clear();
+                hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
                 if (FAILED(hr)) {
                     printf("Failed to decode IDR frame: 0x%08X\n", hr);
+                }
+                
+                // 有効なYUVデータが得られた場合はファイルに書き込む
+                if (!decodedFrameData.empty()) {
+                    decoder.yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
                 }
             }
             // その他のNALユニット
             else {
-                hr = DecodeNalUnit(&decoder, nalUnit);
+                hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
                 if (FAILED(hr)) {
                     printf("Failed to decode NAL unit type %d: 0x%08X\n", nalType, hr);
+                }
+                
+                // 有効なYUVデータが得られた場合はファイルに書き込む
+                if (!decodedFrameData.empty()) {
+                    decoder.yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
                 }
             }
         }
