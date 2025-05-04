@@ -128,6 +128,7 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
     if (pInBuffer) {
         pInBuffer->Release();
         pInBuffer = NULL;
+        
     }
     
     // 入力サンプルをデコーダに渡す
