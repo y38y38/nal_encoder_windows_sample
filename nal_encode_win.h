@@ -41,8 +41,6 @@ HRESULT InitializeEncoder(NalEncoder* pEncoder);
 // フレームをエンコードする関数
 HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData, std::vector<std::vector<BYTE>>& outputNalUnits);
 
-// NALユニットをファイルに書き込む関数
-HRESULT WriteNalToFile(NalEncoder* pEncoder, IMFSample* pSample);
 
 // IMFSampleからNALユニットを抽出する関数
 HRESULT ExtractNalUnitsFromSample(IMFSample* pSample, std::vector<std::vector<BYTE>>& outputNalUnits);

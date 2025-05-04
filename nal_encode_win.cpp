@@ -39,64 +39,6 @@ void GenerateTestFrame(std::vector<BYTE>& buffer, UINT32 width, UINT32 height, U
     }
 }
 
-// NALユニットをファイルに書き込む関数
-HRESULT WriteNalToFile(IMFSample* pSample, const std::string& outputFilename)
-{
-    HRESULT hr = S_OK;
-    DWORD bufferCount = 0;
-
-    hr = pSample->GetBufferCount(&bufferCount);
-    CHECK_HR(hr, "GetBufferCount");
-
-    printf("Processing: NAL units (buffer count: %d)\n", bufferCount);
-
-    std::ofstream outputFile(outputFilename, std::ios::binary | std::ios::app);
-    if (!outputFile.is_open()) {
-        printf("Failed to open output file: %s\n", outputFilename.c_str());
-        return E_FAIL;
-    }
-
-    for (DWORD i = 0; i < bufferCount; i++) {
-        IMFMediaBuffer* pBuffer = NULL;
-        hr = pSample->GetBufferByIndex(i, &pBuffer);
-        CHECK_HR(hr, "GetBufferByIndex");
-
-        BYTE* pData = NULL;
-        DWORD maxLength = 0;
-        DWORD currentLength = 0;
-
-        hr = pBuffer->Lock(&pData, &maxLength, &currentLength);
-        CHECK_HR(hr, "Lock");
-
-        // NALユニットをファイルに書き込み
-        if (currentLength > 0 && pData != NULL) {
-            // NALユニット長をファイルに書き込む (ビッグエンディアン 4バイト)
-            BYTE lengthBytes[4];
-            lengthBytes[0] = (currentLength >> 24) & 0xFF;
-            lengthBytes[1] = (currentLength >> 16) & 0xFF;
-            lengthBytes[2] = (currentLength >> 8) & 0xFF;
-            lengthBytes[3] = currentLength & 0xFF;
-
-            outputFile.write(reinterpret_cast<char*>(lengthBytes), 4);
-
-            // NALユニットデータを書き込む
-            outputFile.write(reinterpret_cast<char*>(pData), currentLength);
-
-            printf("  - NAL unit written: %d bytes\n", currentLength);
-        }
-
-        hr = pBuffer->Unlock();
-        CHECK_HR(hr, "Unlock");
-
-        if (pBuffer) {
-            pBuffer->Release();
-            pBuffer = NULL;
-        }
-    }
-
-    outputFile.close();
-    return hr;
-}
 
 // IMFSampleからNALユニットを抽出する関数
 HRESULT ExtractNalUnitsFromSample(IMFSample* pSample, std::vector<std::vector<BYTE>>& outputNalUnits)
