@@ -1,4 +1,9 @@
+// clang-format off
+#include <windows.h>
 #include "yuv_encoder_win.h"
+#include <codecapi.h>
+#include <strmif.h>
+// clang-format on
 
 // Media Foundationライブラリをリンク
 #pragma comment(lib, "mfplat.lib")
@@ -140,6 +145,27 @@ HRESULT InitializeEncoder(NalEncoder* pEncoder)
     hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER,
                            IID_IMFTransform, (void**)&pEncoder->pEncoder);
     CHECK_HR(hr, "CoCreateInstance H.264 Encoder");
+#if 0
+    // すべてのフレームをIDRフレームにするためGOP長を1に設定
+    ICodecAPI* pCodecAPI = nullptr;
+    hr = pEncoder->pEncoder->QueryInterface(IID_PPV_ARGS(&pCodecAPI));
+    if (SUCCEEDED(hr) && pCodecAPI) {
+        VARIANT var;
+        VariantInit(&var);
+        var.vt = VT_UI4;
+        var.ulVal = 1; // GOP長=1
+        // GOP長
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
+        // Bピクチャ数=0
+        var.ulVal = 0;
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
+        // すべてIDR化
+        var.vt = VT_BOOL;
+        var.boolVal = VARIANT_TRUE;
+        pCodecAPI->SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &var);
+        pCodecAPI->Release();
+    }
+#endif
     
     // 出力メディアタイプの設定
     hr = MFCreateMediaType(&pEncoder->pOutputType);

@@ -80,6 +80,10 @@ int main()
         printf("FlushEncoder failed: 0x%08X\n", hr);
     }
     
+    // 注意: H.264エンコーダはPフレーム混在時、全フレームでNALユニットが出力されるとは限りません。
+    // 例: 100フレーム入力してもNALユニット数が92などになる場合があります（仕様通り）。
+    // 全フレーム分のNALユニットが必要な場合は全てIDR出力にしてください。
+
     // 全NALユニットをファイルに書き込む
     printf("Writing %zu NAL units to file...\n", allNalUnits.size());
     // ファイルポインタを使用してNALユニットを保存
