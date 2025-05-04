@@ -109,7 +109,7 @@ HRESULT InitializeEncoder(NalEncoder* pEncoder)
     // デフォルトパラメータ設定
 #if 1
     pEncoder->width = 1920;
-    pEncoder->height = 1088;
+    pEncoder->height = 1088;//8の倍数にする必要がある
 #else
 pEncoder->width = 640;
 pEncoder->height = 480;
