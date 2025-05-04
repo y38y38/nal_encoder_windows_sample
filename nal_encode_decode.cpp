@@ -75,6 +75,13 @@ int main()
     
     // 全NALユニットをファイルに書き込む
     printf("Writing %zu NAL units to file...\n", allNalUnits.size());
+    // ファイルポインタを使用してNALユニットを保存
+    FILE* nalFile = fopen("output.nal", "wb");
+    if (!nalFile) {
+        printf("Failed to open output.nal for writing.\n");
+        return 1;
+    }
+
     for (const auto& nalUnit : allNalUnits) {
         // NALユニット長をファイルに書き込む (ビッグエンディアン 4バイト)
         BYTE lengthBytes[4];
@@ -82,10 +89,12 @@ int main()
         lengthBytes[1] = (nalUnit.size() >> 16) & 0xFF;
         lengthBytes[2] = (nalUnit.size() >> 8) & 0xFF;
         lengthBytes[3] = nalUnit.size() & 0xFF;
-        
-        encoder.nalFile.write(reinterpret_cast<const char*>(lengthBytes), 4);
-        encoder.nalFile.write(reinterpret_cast<const char*>(nalUnit.data()), nalUnit.size());
+
+        fwrite(lengthBytes, 1, 4, nalFile);
+        fwrite(nalUnit.data(), 1, nalUnit.size(), nalFile);
     }
+
+    fclose(nalFile);
     
     // エンコーダーのシャットダウン
     hr = ShutdownEncoder(&encoder);
