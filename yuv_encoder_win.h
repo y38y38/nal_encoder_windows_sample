@@ -45,5 +45,7 @@ HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData, st
 // IMFSampleからNALユニットを抽出する関数
 HRESULT ExtractNalUnitsFromSample(IMFSample* pSample, std::vector<std::vector<BYTE>>& outputNalUnits);
 
+HRESULT FlushEncoder(NalEncoder* pEncoder, std::vector<std::vector<BYTE>>& allNalUnits);
+
 // エンコーダーリソースを解放する関数
 HRESULT ShutdownEncoder(NalEncoder* pEncoder);

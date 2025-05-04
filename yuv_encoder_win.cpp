@@ -102,8 +102,8 @@ HRESULT InitializeEncoder(NalEncoder* pEncoder)
     pEncoder->frameCount = 0;
     
     // デフォルトパラメータ設定
-    pEncoder->width = 640;
-    pEncoder->height = 480;
+    pEncoder->width = 1920;
+    pEncoder->height = 1080;
     pEncoder->frameRateNum = 30;
     pEncoder->frameRateDenom = 1;
     pEncoder->bitrate = 1500000; // 1.5 Mbps
@@ -334,16 +334,61 @@ HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData, st
     return hr;
 }
 
+/**
+ * FlushEncoder: Flush後のNALユニットをallNalUnitsに追加する
+ */
+HRESULT FlushEncoder(NalEncoder* pEncoder, std::vector<std::vector<BYTE>>& allNalUnits)
+{
+    HRESULT hr = S_OK;
+    if (!pEncoder || !pEncoder->pEncoder) return E_POINTER;
+
+    // フラッシュのためにストリーミング終了を通知
+    pEncoder->pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
+    pEncoder->pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+
+    // Flush後の出力回収
+    while (true) {
+        MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {0};
+        DWORD processOutputStatus = 0;
+        IMFSample* pOutSample = nullptr;
+        IMFMediaBuffer* pOutBuffer = nullptr;
+
+        HRESULT hrSample = MFCreateSample(&pOutSample);
+        if (FAILED(hrSample)) break;
+        HRESULT hrBuffer = MFCreateMemoryBuffer(pEncoder->width * pEncoder->height * 2, &pOutBuffer);
+        if (FAILED(hrBuffer)) {
+            pOutSample->Release();
+            break;
+        }
+        pOutSample->AddBuffer(pOutBuffer);
+
+        outputDataBuffer.dwStreamID = 0;
+        outputDataBuffer.pSample = pOutSample;
+
+        HRESULT hrOut = pEncoder->pEncoder->ProcessOutput(0, 1, &outputDataBuffer, &processOutputStatus);
+        if (hrOut == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            // もう出力はない
+            pOutBuffer->Release();
+            pOutSample->Release();
+            break;
+        } else if (SUCCEEDED(hrOut)) {
+            // NALユニットを抽出してallNalUnitsに追加
+            std::vector<std::vector<BYTE>> nalUnits;
+            ExtractNalUnitsFromSample(outputDataBuffer.pSample, nalUnits);
+            for (auto& nalu : nalUnits) {
+                allNalUnits.push_back(std::move(nalu));
+            }
+        }
+        if (pOutBuffer) pOutBuffer->Release();
+        if (pOutSample) pOutSample->Release();
+    }
+    return hr;
+}
+
 // エンコーダーリソースを解放する関数
 HRESULT ShutdownEncoder(NalEncoder* pEncoder)
 {
     HRESULT hr = S_OK;
-    
-    // フラッシュのためにストリーミング終了を通知
-    if (pEncoder->pEncoder) {
-        pEncoder->pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
-        pEncoder->pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-    }
     
     // NAL出力ファイルを閉じる
     

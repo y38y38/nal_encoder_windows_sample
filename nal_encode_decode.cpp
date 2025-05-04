@@ -73,13 +73,19 @@ int main()
             printf("Encoded frame %d/%d\n", i, frameCount);
         }
     }
+
+    // FlushEncoderでflush後のNALユニットもallNalUnitsに追加
+    hr = FlushEncoder(&encoder, allNalUnits);
+    if (FAILED(hr)) {
+        printf("FlushEncoder failed: 0x%08X\n", hr);
+    }
     
     // 全NALユニットをファイルに書き込む
     printf("Writing %zu NAL units to file...\n", allNalUnits.size());
     // ファイルポインタを使用してNALユニットを保存
-    FILE* nalFile = fopen("output.nal", "wb");
+    FILE* nalFile = fopen("output.h264", "wb");
     if (!nalFile) {
-        printf("Failed to open output.nal for writing.\n");
+        printf("Failed to open output.h264 for writing.\n");
         return 1;
     }
 
