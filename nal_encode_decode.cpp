@@ -5,6 +5,7 @@
 #include <mferror.h>
 #include <codecapi.h>
 #include <stdio.h>
+#define _CRT_SECURE_NO_WARNINGS
 #include <vector>
 #include <fstream>
 #include <string>
