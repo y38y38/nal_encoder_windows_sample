@@ -91,46 +91,101 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
     HRESULT hr = S_OK;
     MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {0};
     DWORD processOutputStatus = 0;
-    
-    // 入力サンプルの作成
-    IMFSample* pInSample = NULL;
-    IMFMediaBuffer* pInBuffer = NULL;
-    
+
     // 出力パラメータの検証
     if (!outputFrameData) {
         return E_INVALIDARG;
     }
-    
+
+    // NALデータが空の場合はProcessInputを呼ばず、ProcessOutputのみ実行（Flush用）
+    if (nalData.empty()) {
+        // 出力サンプルの取得
+        IMFSample* pOutSample = NULL;
+        hr = MFCreateSample(&pOutSample);
+        CHECK_HR(hr, "MFCreateSample for decoder output");
+        IMFMediaBuffer* pOutBuffer = NULL;
+        UINT32 nv12Size = pDecoder->width * pDecoder->height * 3 / 2;
+        hr = MFCreateMemoryBuffer(nv12Size, &pOutBuffer);
+        CHECK_HR(hr, "MFCreateMemoryBuffer for decoder output");
+        hr = pOutSample->AddBuffer(pOutBuffer);
+        CHECK_HR(hr, "AddBuffer to decoder output sample");
+        if (pOutBuffer) {
+            pOutBuffer->Release();
+            pOutBuffer = NULL;
+        }
+        outputDataBuffer.dwStreamID = 0;
+        outputDataBuffer.pSample = pOutSample;
+        outputDataBuffer.dwStatus = 0;
+        outputDataBuffer.pEvents = NULL;
+        hr = pDecoder->pDecoder->ProcessOutput(0, 1, &outputDataBuffer, &processOutputStatus);
+        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            if (pOutSample) {
+                pOutSample->Release();
+            }
+            return hr;
+        } else if (SUCCEEDED(hr)) {
+            IMFMediaBuffer* pBuffer = NULL;
+            hr = pOutSample->ConvertToContiguousBuffer(&pBuffer);
+            CHECK_HR(hr, "ConvertToContiguousBuffer for decoder output");
+            BYTE* pYuvData = NULL;
+            DWORD yuvMaxLength = 0;
+            DWORD yuvCurrentLength = 0;
+            hr = pBuffer->Lock(&pYuvData, &yuvMaxLength, &yuvCurrentLength);
+            CHECK_HR(hr, "Lock decoder output buffer");
+            if (yuvCurrentLength > 0 && pYuvData != NULL) {
+                size_t currentSize = outputFrameData->size();
+                outputFrameData->resize(currentSize + yuvCurrentLength);
+                memcpy(outputFrameData->data() + currentSize, pYuvData, yuvCurrentLength);
+                printf("Decoded frame %llu: %d bytes of YUV data\n", pDecoder->frameCount, yuvCurrentLength);
+                pDecoder->frameCount++;
+            }
+            hr = pBuffer->Unlock();
+            CHECK_HR(hr, "Unlock decoder output buffer");
+            if (pBuffer) {
+                pBuffer->Release();
+            }
+        } else {
+            CHECK_HR(hr, "ProcessOutput for decoder");
+        }
+        if (pOutSample) {
+            pOutSample->Release();
+        }
+        return hr;
+    }
+
+    // 入力サンプルの作成
+    IMFSample* pInSample = NULL;
+    IMFMediaBuffer* pInBuffer = NULL;
+
     hr = MFCreateSample(&pInSample);
     CHECK_HR(hr, "MFCreateSample for decoder input");
-    
+
     hr = MFCreateMemoryBuffer(static_cast<DWORD>(nalData.size()), &pInBuffer);
     CHECK_HR(hr, "MFCreateMemoryBuffer for decoder input");
-    
+
     // NALデータをバッファにコピー
     BYTE* pData = NULL;
     DWORD maxLength = 0;
     DWORD currentLength = 0;
-    
+
     hr = pInBuffer->Lock(&pData, &maxLength, &currentLength);
     CHECK_HR(hr, "Lock decoder input buffer");
-    
+
     memcpy(pData, nalData.data(), nalData.size());
     hr = pInBuffer->SetCurrentLength(static_cast<DWORD>(nalData.size()));
     CHECK_HR(hr, "SetCurrentLength for decoder input");
-    
+
     hr = pInBuffer->Unlock();
     CHECK_HR(hr, "Unlock decoder input buffer");
-    
+
     hr = pInSample->AddBuffer(pInBuffer);
     CHECK_HR(hr, "AddBuffer to decoder input sample");
-    
+
     if (pInBuffer) {
         pInBuffer->Release();
         pInBuffer = NULL;
-        
     }
-    
+
     // 入力サンプルをデコーダに渡す
     hr = pDecoder->pDecoder->ProcessInput(0, pInSample, 0);
     if (hr == MF_E_NOTACCEPTING) {
@@ -139,45 +194,45 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
     } else {
         CHECK_HR(hr, "ProcessInput for decoder");
     }
-    
+
     if (pInSample) {
         pInSample->Release();
         pInSample = NULL;
     }
-    
+
     // 出力サンプルの取得
     IMFSample* pOutSample = NULL;
-    
+
     // デコード結果を取得
     do {
         // 出力サンプルを作成
         hr = MFCreateSample(&pOutSample);
         CHECK_HR(hr, "MFCreateSample for decoder output");
-        
+
         // 出力バッファを作成
         IMFMediaBuffer* pOutBuffer = NULL;
         UINT32 nv12Size = pDecoder->width * pDecoder->height * 3 / 2; // NV12のサイズ
-        
+
         hr = MFCreateMemoryBuffer(nv12Size, &pOutBuffer);
         CHECK_HR(hr, "MFCreateMemoryBuffer for decoder output");
-        
+
         hr = pOutSample->AddBuffer(pOutBuffer);
         CHECK_HR(hr, "AddBuffer to decoder output sample");
-        
+
         if (pOutBuffer) {
             pOutBuffer->Release();
             pOutBuffer = NULL;
         }
-        
+
         // 出力データバッファの設定
         outputDataBuffer.dwStreamID = 0;
         outputDataBuffer.pSample = pOutSample;
         outputDataBuffer.dwStatus = 0;
         outputDataBuffer.pEvents = NULL;
-        
+
         // 出力処理
         hr = pDecoder->pDecoder->ProcessOutput(0, 1, &outputDataBuffer, &processOutputStatus);
-        
+
         if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
             // さらに入力が必要な場合（出力がない場合）
             printf("Decoder needs more input\n");
@@ -192,31 +247,30 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
             IMFMediaBuffer* pBuffer = NULL;
             hr = pOutSample->ConvertToContiguousBuffer(&pBuffer);
             CHECK_HR(hr, "ConvertToContiguousBuffer for decoder output");
-            
+
             BYTE* pYuvData = NULL;
             DWORD yuvMaxLength = 0;
             DWORD yuvCurrentLength = 0;
-            
+
             hr = pBuffer->Lock(&pYuvData, &yuvMaxLength, &yuvCurrentLength);
             CHECK_HR(hr, "Lock decoder output buffer");
-            
+
             // YUVデータを出力ベクターにコピー
             if (yuvCurrentLength > 0 && pYuvData != NULL) {
                 // 出力ベクターのサイズを設定（既存データがあれば追加）
                 size_t currentSize = outputFrameData->size();
                 outputFrameData->resize(currentSize + yuvCurrentLength);
-                
+
                 // YUVデータをコピー
                 memcpy(outputFrameData->data() + currentSize, pYuvData, yuvCurrentLength);
-                
-                printf("Decoded frame %llu: %d bytes of YUV data\n", 
-                       pDecoder->frameCount, yuvCurrentLength);
+
+                printf("Decoded frame %llu: %d bytes of YUV data\n", pDecoder->frameCount, yuvCurrentLength);
                 pDecoder->frameCount++;
             }
-            
+
             hr = pBuffer->Unlock();
             CHECK_HR(hr, "Unlock decoder output buffer");
-            
+
             if (pBuffer) {
                 pBuffer->Release();
                 pBuffer = NULL;
@@ -226,14 +280,41 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
             CHECK_HR(hr, "ProcessOutput for decoder");
             break;
         }
-        
+
         if (pOutSample) {
             pOutSample->Release();
             pOutSample = NULL;
         }
     } while (SUCCEEDED(hr));
-    
+
     return hr;
+}
+
+// デコーダーをFlushし、残りの出力フレームをYUVファイルに書き込む関数
+HRESULT FlushDecoder(NalDecoder* pDecoder) {
+    if (!pDecoder || !pDecoder->pDecoder) return E_POINTER;
+    HRESULT hr = S_OK;
+    hr = pDecoder->pDecoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
+    if (FAILED(hr)) {
+        printf("Decoder drain command failed: 0x%08X\n", hr);
+        return hr;
+    }
+    // 残りの出力フレームを取得
+    while (true) {
+        std::vector<BYTE> flushedFrameData;
+        HRESULT hrOut = DecodeNalUnit(pDecoder, std::vector<BYTE>(), &flushedFrameData);
+        if (hrOut == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            // もう出力はない
+            break;
+        } else if (FAILED(hrOut)) {
+            printf("Flush decode failed: 0x%08X\n", hrOut);
+            break;
+        }
+        if (!flushedFrameData.empty()) {
+            pDecoder->yuvFile.write(reinterpret_cast<const char*>(flushedFrameData.data()), flushedFrameData.size());
+        }
+    }
+    return S_OK;
 }
 
 // デコーダーリソースを解放する関数

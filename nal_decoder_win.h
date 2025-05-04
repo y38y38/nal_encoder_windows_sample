@@ -33,3 +33,6 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
 
 // デコーダーリソースを解放する関数
 HRESULT ShutdownDecoder(NalDecoder* pDecoder);
+
+// デコーダーをFlushし、残りの出力フレームをYUVファイルに書き込む関数
+HRESULT FlushDecoder(NalDecoder* pDecoder);

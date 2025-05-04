@@ -154,7 +154,13 @@ int main()
                 }
         }
     }
-    
+#if 1
+    // FlushDecoder APIで残りの出力フレームを取得
+    hr = FlushDecoder(&decoder);
+    if (FAILED(hr)) {
+        printf("FlushDecoder failed: 0x%08X\n", hr);
+    }
+#endif
     // デコーダーのシャットダウン
     hr = ShutdownDecoder(&decoder);
     if (FAILED(hr)) {
