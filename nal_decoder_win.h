@@ -36,3 +36,8 @@ HRESULT ShutdownDecoder(NalDecoder* pDecoder);
 
 // デコーダーをFlushし、残りの出力フレームをYUVファイルに書き込む関数
 HRESULT FlushDecoder(NalDecoder* pDecoder);
+
+// リファクタリング用の内部関数（外部からは呼ばないでください）
+HRESULT ProcessEmptyNalUnit(NalDecoder* pDecoder, std::vector<BYTE>* outputFrameData);
+HRESULT ProcessNalInput(NalDecoder* pDecoder, const std::vector<BYTE>& nalData);
+HRESULT ProcessDecoderOutput(NalDecoder* pDecoder, std::vector<BYTE>* outputFrameData);
