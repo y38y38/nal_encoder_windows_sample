@@ -13,8 +13,8 @@ endif()
 # NAL Encoder & Decoderアプリケーション
 add_executable(nal_encode_decode 
     nal_encode_decode.cpp
-    nal_encode_win.cpp
-    nal_encode_win.h
+    yuv_encoder_win.cpp
+    yuv_encoder_win.h
     nal_decode_win.cpp
     nal_decode_win.h
 )

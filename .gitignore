@@ -25,8 +25,9 @@ build/
 
 # テスト出力ファイル
 output_nal.h264
-
+output.yuv
 # CMakeが生成するファイル
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+output.nal
