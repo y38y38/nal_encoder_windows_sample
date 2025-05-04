@@ -15,8 +15,8 @@ add_executable(nal_encode_decode
     nal_encode_decode.cpp
     yuv_encoder_win.cpp
     yuv_encoder_win.h
-    nal_decode_win.cpp
-    nal_decode_win.h
+nal_decoder_win.cpp
+nal_decoder_win.h
 )
 
 # Windows固有のリンク設定

@@ -1,4 +1,4 @@
-#include "nal_encode_win.h"
+#include "yuv_encoder_win.h"
 
 // Media Foundationライブラリをリンク
 #pragma comment(lib, "mfplat.lib")

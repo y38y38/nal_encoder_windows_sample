@@ -10,8 +10,8 @@
 #include <fstream>
 #include <string>
 #include <dshow.h>
-#include "nal_encode_win.h"  // エンコーダー機能のヘッダ
-#include "nal_decode_win.h"  // デコーダー機能のヘッダを追加
+#include "yuv_encoder_win.h"  // エンコーダー機能のヘッダ
+#include "nal_decoder_win.h"  // デコーダー機能のヘッダを追加
 
 // Media Foundationライブラリをリンク
 #pragma comment(lib, "mfplat.lib")

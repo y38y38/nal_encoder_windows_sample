@@ -1,4 +1,4 @@
-#include "nal_decode_win.h"
+#include "nal_decoder_win.h"
 #include <stdio.h>
 
 // H.264デコーダーのCLSIDを定義
