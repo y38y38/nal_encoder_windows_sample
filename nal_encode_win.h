@@ -27,8 +27,6 @@ struct NalEncoder {
     UINT64 frameCount;                 // 処理したフレーム数
 
     // 出力NALユニットファイル
-    std::ofstream nalFile;
-    std::string nalFilename;
 };
 
 // テストフレームをNV12形式で生成する関数
@@ -36,6 +34,9 @@ void GenerateTestFrame(std::vector<BYTE>& buffer, UINT32 width, UINT32 height, U
 
 // エンコーダーを初期化する関数
 HRESULT InitializeEncoder(NalEncoder* pEncoder, const char* outputFilename);
+
+// エンコーダーを初期化する関数
+HRESULT InitializeEncoder(NalEncoder* pEncoder);
 
 // フレームをエンコードする関数
 HRESULT EncodeFrame(NalEncoder* pEncoder, const std::vector<BYTE>& frameData, std::vector<std::vector<BYTE>>& outputNalUnits);

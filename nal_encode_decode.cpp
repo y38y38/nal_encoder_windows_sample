@@ -38,7 +38,7 @@ int main()
     NalEncoder encoder;
     
     // エンコーダーの初期化
-    hr = InitializeEncoder(&encoder, "output_nal.h264");
+    hr = InitializeEncoder(&encoder);
     if (FAILED(hr)) {
         printf("Encoder initialization failed: 0x%08X\n", hr);
         CoUninitialize();
