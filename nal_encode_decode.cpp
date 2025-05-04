@@ -119,10 +119,20 @@ int main()
     // デコーダーオブジェクトの作成
     NalDecoder decoder;
     
-    // デコーダーの初期化
-    hr = InitializeDecoder(&decoder, encoder.width, encoder.height, "output.yuv");
+    // YUVファイルを開く（main関数で管理）
+    const char* outputYuvFilename = "output.yuv";
+    std::ofstream yuvFile(outputYuvFilename, std::ios::binary | std::ios::trunc);
+    if (!yuvFile.is_open()) {
+        printf("Failed to create output YUV file: %s\n", outputYuvFilename);
+        CoUninitialize();
+        return 1;
+    }
+    
+    // デコーダーの初期化（ファイル名を渡さない）
+    hr = InitializeDecoder(&decoder, encoder.width, encoder.height);
     if (FAILED(hr)) {
         printf("Decoder initialization failed: 0x%08X\n", hr);
+        yuvFile.close();
         CoUninitialize();
         return 1;
     }
@@ -134,7 +144,6 @@ int main()
     // IDRフレームの前にSPS/PPSを常に送るようにする
     std::vector<BYTE> spsData;
     std::vector<BYTE> ppsData;
-    std::vector<BYTE> frameData; // デコードされたフレームデータを格納するためのベクター
     
     for (const auto& nalUnit : allNalUnits) {
         if (nalUnit.size() > 0) {
@@ -143,24 +152,34 @@ int main()
             
             // デコードされたフレームデータを格納するためのベクター
             std::vector<BYTE> decodedFrameData;
-                hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
-                if (FAILED(hr)) {
-                    printf("Failed to decode NAL unit type %d: 0x%08X\n", nalType, hr);
-                }
-                
-                // 有効なYUVデータが得られた場合はファイルに書き込む
-                if (!decodedFrameData.empty()) {
-                    decoder.yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
-                }
+            hr = DecodeNalUnit(&decoder, nalUnit, &decodedFrameData);
+            if (FAILED(hr)) {
+                printf("Failed to decode NAL unit type %d: 0x%08X\n", nalType, hr);
+            }
+            
+            // 有効なYUVデータが得られた場合はファイルに書き込む（main関数で実行）
+            if (!decodedFrameData.empty()) {
+                yuvFile.write(reinterpret_cast<const char*>(decodedFrameData.data()), decodedFrameData.size());
+            }
         }
     }
-#if 1
-    // FlushDecoder APIで残りの出力フレームを取得
-    hr = FlushDecoder(&decoder);
+
+    // FlushDecoderで残りの出力フレームを取得
+    std::vector<std::vector<BYTE>> flushedFrames;
+    hr = FlushDecoder(&decoder, flushedFrames);
     if (FAILED(hr)) {
         printf("FlushDecoder failed: 0x%08X\n", hr);
     }
-#endif
+    
+    // フラッシュで得られたフレームもYUVファイルに書き込む
+    for (const auto& frame : flushedFrames) {
+        yuvFile.write(reinterpret_cast<const char*>(frame.data()), frame.size());
+    }
+
+    // YUVファイルを閉じる（main関数で管理）
+    yuvFile.close();
+    printf("YUV output file closed: %s\n", outputYuvFilename);
+    
     // デコーダーのシャットダウン
     hr = ShutdownDecoder(&decoder);
     if (FAILED(hr)) {

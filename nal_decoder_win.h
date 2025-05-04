@@ -19,14 +19,10 @@ struct NalDecoder {
     UINT32 width;                      // 映像幅
     UINT32 height;                     // 映像高さ
     UINT64 frameCount;                 // 処理したフレーム数
-
-    // 出力YUVファイル
-    std::ofstream yuvFile;
-    std::string yuvFilename;
 };
 
 // デコーダーを初期化する関数
-HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height, const char* outputFilename);
+HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height);
 
 // NALユニットをデコードして、YUVフレームデータとして返す
 HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, std::vector<BYTE>* outputFrameData);
@@ -34,8 +30,8 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
 // デコーダーリソースを解放する関数
 HRESULT ShutdownDecoder(NalDecoder* pDecoder);
 
-// デコーダーをFlushし、残りの出力フレームをYUVファイルに書き込む関数
-HRESULT FlushDecoder(NalDecoder* pDecoder);
+// デコーダーをFlushし、残りの出力フレームを取得する関数
+HRESULT FlushDecoder(NalDecoder* pDecoder, std::vector<std::vector<BYTE>>& flushedFrames);
 
 // リファクタリング用の内部関数（外部からは呼ばないでください）
 HRESULT ProcessEmptyNalUnit(NalDecoder* pDecoder, std::vector<BYTE>* outputFrameData);

@@ -12,7 +12,7 @@ static const GUID CLSID_CMSH264DecoderMFT =
 }
 
 // デコーダーを初期化する関数
-HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height, const char* outputFilename) {
+HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height) {
     HRESULT hr = S_OK;
     
     // 構造体の初期化
@@ -24,14 +24,6 @@ HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height, con
     // パラメータ設定
     pDecoder->width = width;
     pDecoder->height = height;
-    
-    // 出力YUVファイルを開く
-    pDecoder->yuvFilename = outputFilename;
-    pDecoder->yuvFile.open(outputFilename, std::ios::binary | std::ios::trunc);
-    if (!pDecoder->yuvFile.is_open()) {
-        printf("Failed to create output YUV file: %s\n", outputFilename);
-        return E_FAIL;
-    }
     
     // H.264デコーダートランスフォームの作成
     hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER,
@@ -80,8 +72,7 @@ HRESULT InitializeDecoder(NalDecoder* pDecoder, UINT32 width, UINT32 height, con
     hr = pDecoder->pDecoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
     CHECK_HR(hr, "ProcessMessage BEGIN_STREAMING for decoder");
     
-    printf("Decoder initialized: %dx%d, Output: %s\n", 
-           pDecoder->width, pDecoder->height, outputFilename);
+    printf("Decoder initialized: %dx%d\n", pDecoder->width, pDecoder->height);
     
     return hr;
 }
@@ -323,15 +314,21 @@ HRESULT DecodeNalUnit(NalDecoder* pDecoder, const std::vector<BYTE>& nalData, st
     return ProcessDecoderOutput(pDecoder, outputFrameData);
 }
 
-// デコーダーをFlushし、残りの出力フレームをYUVファイルに書き込む関数
-HRESULT FlushDecoder(NalDecoder* pDecoder) {
+// デコーダーをFlushし、残りの出力フレームを取得する関数
+HRESULT FlushDecoder(NalDecoder* pDecoder, std::vector<std::vector<BYTE>>& flushedFrames) {
     if (!pDecoder || !pDecoder->pDecoder) return E_POINTER;
     HRESULT hr = S_OK;
+    
+    // フレームデータ配列をクリア
+    flushedFrames.clear();
+    
+    // Drainメッセージを送信
     hr = pDecoder->pDecoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
     if (FAILED(hr)) {
         printf("Decoder drain command failed: 0x%08X\n", hr);
         return hr;
     }
+    
     // 残りの出力フレームを取得
     while (true) {
         std::vector<BYTE> flushedFrameData;
@@ -343,10 +340,15 @@ HRESULT FlushDecoder(NalDecoder* pDecoder) {
             printf("Flush decode failed: 0x%08X\n", hrOut);
             break;
         }
+        
+        // デコードされたフレームデータが存在する場合は、出力配列に追加
         if (!flushedFrameData.empty()) {
-            pDecoder->yuvFile.write(reinterpret_cast<const char*>(flushedFrameData.data()), flushedFrameData.size());
+            flushedFrames.push_back(std::move(flushedFrameData));
+            printf("Flushed frame added: %zu bytes\n", flushedFrames.back().size());
         }
     }
+    
+    printf("Flush completed, total %zu frames retrieved\n", flushedFrames.size());
     return S_OK;
 }
 
@@ -358,12 +360,6 @@ HRESULT ShutdownDecoder(NalDecoder* pDecoder) {
     if (pDecoder->pDecoder) {
         pDecoder->pDecoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
         pDecoder->pDecoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-    }
-    
-    // YUV出力ファイルを閉じる
-    if (pDecoder->yuvFile.is_open()) {
-        pDecoder->yuvFile.close();
-        printf("YUV output file closed: %s\n", pDecoder->yuvFilename.c_str());
     }
     
     // リソースの解放
