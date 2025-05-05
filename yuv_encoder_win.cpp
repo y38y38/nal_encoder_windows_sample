@@ -76,6 +76,27 @@ HRESULT ExtractNalUnitsFromSample(IMFSample* pSample, std::vector<std::vector<BY
         if (currentLength > 0 && pData != NULL) {
             // 新しいNALユニット用のvector作成
             std::vector<BYTE> nalUnit(pData, pData + currentLength);
+            // pDataの先頭の16バイトを表示
+            printf("First 16 bytes of pData: ");
+            for (int j = 0; j < 16 && j < currentLength; j++) {
+                printf("%02X ", pData[j]);
+            }
+            // pic_typeを表示
+            UINT32 picType = 0;
+            IMFAttributes* pAttributes = nullptr;
+            hr = pSample->QueryInterface(IID_PPV_ARGS(&pAttributes));
+            if (SUCCEEDED(hr)) {
+                hr = pAttributes->GetUINT32(MFSampleExtension_CleanPoint, &picType);
+                if (SUCCEEDED(hr)) {
+                    const char* picTypeStr = (picType == 1) ? "I-frame" : (picType == 0) ? "P-frame" : "B-frame";
+                    printf("pic_type: %s\n", picTypeStr);
+                }
+                pAttributes->Release();
+            }
+            printf("\n");
+            if (nalUnit.size() > 5) {
+                nalUnit.erase(nalUnit.begin(), nalUnit.begin() + 5);
+            }
             outputNalUnits.push_back(nalUnit);
             
             printf("  - NAL unit extracted: %d bytes\n", currentLength);
